@@ -18,7 +18,7 @@
 FROM nvidia/cuda:12.8.0-cudnn9-runtime-ubuntu22.04
 
 # ── Labels ────────────────────────────────────────────────────────────────────
-LABEL maintainer="ltx23" \
+LABEL maintainer="thesonicprint" \
       description="LTX-2.3 22B inference — CUDA 12.8, PyTorch 2.7, Python 3.12" \
       cuda="12.8" \
       pytorch="2.7" \
