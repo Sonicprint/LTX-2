@@ -11,7 +11,7 @@
 #    docker push <your-dockerhub-user>/ltx23:latest
 #
 #  On Vast.ai, set the "On-start script" to:
-#    HF_TOKEN=hf_xxx bash /workspace/setup.sh
+#    HF_TOKEN=hf_xxx bash /root/setup.sh
 #  This handles model downloads separately (models are too large for the image).
 # =============================================================================
 
@@ -58,11 +58,7 @@ RUN mkdir /var/run/sshd && \
 # ── uv (fast Python package manager) ─────────────────────────────────────────
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# ── PyTorch 2.7 + CUDA 12.8 ──────────────────────────────────────────────────
-RUN python3.12 -m pip install --quiet --upgrade pip && \
-    python3.12 -m pip install --quiet \
-        torch==2.7.0 torchvision torchaudio \
-        --index-url https://download.pytorch.org/whl/cu128
+# ── PyTorch is installed via uv during the Python dependency sync step ──────
 
 # ── Clone the LTX-2 repo (code only — no weights) ─────────────────────────────
 WORKDIR /workspace
@@ -79,8 +75,8 @@ RUN uv sync --frozen --extra xformers --no-progress || \
 RUN mkdir -p /workspace/LTX-2/checkpoints/loras
 
 # ── Copy setup script for model downloads at runtime ─────────────────────────
-COPY setup.sh /workspace/setup.sh
-RUN chmod +x /workspace/setup.sh
+COPY setup.sh /root/setup.sh
+RUN chmod +x /root/setup.sh
 
 # ── Environment for inference runtime ────────────────────────────────────────
 ENV LTX_CHECKPOINTS_DIR=/workspace/LTX-2/checkpoints \

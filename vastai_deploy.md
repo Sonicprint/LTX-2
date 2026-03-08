@@ -39,11 +39,11 @@ This means you **build and push the Docker image once**, then Vast.ai re-uses it
 cd /teamspace/studios/this_studio/LTX-2
 
 # Build
-docker build -t ltx23:latest .
+docker build -t spltx23:latest .
 
 # Tag and push to Docker Hub
-docker tag ltx23:latest <your-dockerhub-username>/ltx23:latest
-docker push <your-dockerhub-username>/ltx23:latest
+docker tag spltx23:latest thesonicprint/spltx23:latest
+docker push thesonicprint/spltx23:latest
 ```
 
 What the image contains:
@@ -51,7 +51,7 @@ What the image contains:
 - PyTorch 2.7.0 (CUDA 12.8 wheel)
 - `uv`, `git`, `ffmpeg`, system libs
 - Repo cloned at `/workspace/LTX-2` with Python deps installed
-- `setup.sh` copied to `/workspace/setup.sh`
+- `setup.sh` copied to `/root/setup.sh`
 - `LTX_CHECKPOINTS_DIR` and `LTX_PACKAGES_DIR` env vars pre-set
 
 ---
@@ -62,8 +62,8 @@ On [cloud.vast.ai](https://cloud.vast.ai) → **Templates** → **Create New**:
 
 | Field | Value |
 |---|---|
-| **Docker image** | `<your-dockerhub-username>/ltx23:latest` |
-| **On-start script** | `HF_TOKEN=hf_your_token bash /workspace/setup.sh` |
+| **Docker image** | `thesonicprint/spltx23:latest` |
+| **On-start script** | `HF_TOKEN=hf_your_token bash /root/setup.sh` |
 | **Environment variables** | `HF_TOKEN=hf_your_token` (add as secret) |
 | **Disk** | 250 GB |
 | **Ports** | 22/tcp |
@@ -78,13 +78,13 @@ The on-start script runs **every time the instance boots**. `setup.sh` skips fil
 
 ```bash
 # Full setup (all models + LoRAs, ~80 GB download on first boot)
-HF_TOKEN=$HF_TOKEN bash /workspace/setup.sh
+HF_TOKEN=$HF_TOKEN bash /root/setup.sh
 
 # Minimal (distilled model + Gemma only, ~52 GB — faster first boot)
-HF_TOKEN=$HF_TOKEN bash /workspace/setup.sh minimal
+HF_TOKEN=$HF_TOKEN bash /root/setup.sh minimal
 
 # Use the smaller dev-fp8 model instead of distilled (~27 GB saving)
-DISTILLED_MODEL=dev-fp8 HF_TOKEN=$HF_TOKEN bash /workspace/setup.sh minimal
+DISTILLED_MODEL=dev-fp8 HF_TOKEN=$HF_TOKEN bash /root/setup.sh minimal
 ```
 
 ---

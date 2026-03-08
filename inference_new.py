@@ -119,9 +119,9 @@ def _check_path(p: Path, label: str) -> None:
         )
 
 _check_path(GEMMA_ROOT, "Gemma directory")
-_check_path(CKPT_BASE,  "Base transformer checkpoint")
 _check_path(UPSCALER,   "Spatial Upscaler")
 _check_path(DIST_LORA,  "Distilled LoRA")
+# Check transformer checkpoint after parsing args
 
 # ─────────────────────────────────────────────────────────────────────────────
 # Logging & Constants
@@ -282,6 +282,7 @@ def build_parser() -> argparse.ArgumentParser:
         formatter_class=argparse.RawDescriptionHelpFormatter,
     )
     p.add_argument("--prompt",       required=True)
+    p.add_argument("--model",        default="dev-fp8", choices=["dev-fp8", "distilled"], help="Which model checkpoint to use")
     p.add_argument("--output",       default="output.mp4")
     p.add_argument("--first-frame",  default=None, metavar="PATH")
     p.add_argument("--end-frame",    default=None, metavar="PATH")
@@ -305,13 +306,16 @@ def main():
     parser = build_parser()
     args   = parser.parse_args()
 
-    if args.checkpoints_dir:
-        global GEMMA_ROOT, CKPT_BASE, UPSCALER, DIST_LORA
-        _ckpt      = Path(args.checkpoints_dir)
-        GEMMA_ROOT = _ckpt / "gemma-3-12b-it-qat-q4_0-unquantized"
-        CKPT_BASE  = _ckpt / "ltx-2.3-22b-dev-fp8.safetensors"
-        UPSCALER   = _ckpt / "ltx-2.3-spatial-upscaler-x2-1.0.safetensors"
-        DIST_LORA  = _ckpt / "ltx-2.3-22b-distilled-lora-384.safetensors"
+    global GEMMA_ROOT, CKPT_BASE, UPSCALER, DIST_LORA
+    _ckpt = Path(args.checkpoints_dir) if args.checkpoints_dir else _CHECKPOINTS_DIR
+    GEMMA_ROOT = _ckpt / "gemma-3-12b-it-qat-q4_0-unquantized"
+    CKPT_BASE  = _ckpt / f"ltx-2.3-22b-{args.model}.safetensors"
+    UPSCALER   = _ckpt / "ltx-2.3-spatial-upscaler-x2-1.0.safetensors"
+    DIST_LORA  = _ckpt / "ltx-2.3-22b-distilled-lora-384.safetensors"
+
+    if not CKPT_BASE.exists():
+        log.error(f"Transformer checkpoint not found: {CKPT_BASE}\n        Set LTX_CHECKPOINTS_DIR if your checkpoints are elsewhere.")
+        sys.exit(1)
 
     w, h = RESOLUTION_MAP[args.resolution]
     if args.width  is not None: w = args.width

@@ -13,6 +13,7 @@ LTX-2/
 ├── inference_new.py
 ├── checkpoints/
 │   ├── gemma-3-12b-it-qat-q4_0-unquantized/
+│   ├── ltx-2.3-22b-dev-fp8.safetensors
 │   ├── ltx-2.3-22b-distilled.safetensors
 │   ├── ltx-2.3-spatial-upscaler-x2-1.0.safetensors
 │   ├── ltx-2.3-spatial-upscaler-x1.5-1.0.safetensors   (optional)
@@ -81,6 +82,7 @@ python inference_new.py \
 | Argument | Default | Description |
 |---|---|---|
 | `--prompt` | *(required)* | Text description of the video |
+| `--model` | `dev-fp8` | Which checkpoint to use: `dev-fp8` or `distilled` |
 | `--output` | `output.mp4` | Output file path |
 | `--first-frame` | None | First (or only) conditioning image |
 | `--end-frame` | None | Last frame image — enables Interpolate mode |
@@ -118,6 +120,16 @@ python inference_new.py \
 | **Total** | **~42 GB** |
 
 This leaves ~6 GB headroom. Using `--no-quantize` (BF16) raises transformer usage to ~44 GB — still fits the L40S but with very little headroom for longer clips.
+
+---
+
+## Setup Downloads
+
+By default, `setup.sh` downloads **both** the `dev-fp8` and `distilled` model checkpoints.
+You can control this behavior by setting the `DISTILLED_MODEL` environment variable before running `setup.sh`:
+- `export DISTILLED_MODEL=both` (default): downloads both models.
+- `export DISTILLED_MODEL=dev-fp8`: downloads only the dev-fp8 model.
+- `export DISTILLED_MODEL=distilled`: downloads only the distilled model.
 
 ---
 

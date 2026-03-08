@@ -33,7 +33,7 @@ CKPT_DIR="${CKPT_DIR:-${INSTALL_DIR}/checkpoints}"
 LORAS_DIR="${LORAS_DIR:-${CKPT_DIR}/loras}"
 SKIP_LORAS="${SKIP_LORAS:-0}"
 SKIP_OPTIONAL="${SKIP_OPTIONAL:-0}"
-DISTILLED_MODEL="${DISTILLED_MODEL:-distilled}"   # "distilled" | "dev-fp8"
+DISTILLED_MODEL="${DISTILLED_MODEL:-both}"   # "both" | "distilled" | "dev-fp8"
 MODE="${1:-full}"   # "full" | "minimal"
 
 [[ "$MODE" == "minimal" ]] && SKIP_LORAS=1 && SKIP_OPTIONAL=1
@@ -151,8 +151,17 @@ case "$DISTILLED_MODEL" in
                "ltx-2.3-22b-dev-fp8.safetensors" \
                "$CKPT_DIR"
         ;;
-    *)
+    distilled)
         info "Downloading distilled checkpoint (~43 GB)..."
+        HF_DL "Lightricks/LTX-2.3" \
+               "ltx-2.3-22b-distilled.safetensors" \
+               "$CKPT_DIR"
+        ;;
+    *)
+        info "Downloading both dev-fp8 and distilled checkpoints..."
+        HF_DL "Lightricks/LTX-2.3" \
+               "ltx-2.3-22b-dev-fp8.safetensors" \
+               "$CKPT_DIR"
         HF_DL "Lightricks/LTX-2.3" \
                "ltx-2.3-22b-distilled.safetensors" \
                "$CKPT_DIR"
@@ -294,9 +303,15 @@ info "Checking checkpoint files..."
 python3 - <<PYEOF
 import os, pathlib
 ckpt = pathlib.Path("${CKPT_DIR}")
-required = [
-    "ltx-2.3-22b-distilled.safetensors" if "${DISTILLED_MODEL}" != "dev-fp8"
-        else "ltx-2.3-22b-dev-fp8.safetensors",
+model_req = []
+if "${DISTILLED_MODEL}" == "both":
+    model_req = ["ltx-2.3-22b-dev-fp8.safetensors", "ltx-2.3-22b-distilled.safetensors"]
+elif "${DISTILLED_MODEL}" == "dev-fp8":
+    model_req = ["ltx-2.3-22b-dev-fp8.safetensors"]
+else:
+    model_req = ["ltx-2.3-22b-distilled.safetensors"]
+
+required = model_req + [
     "ltx-2.3-spatial-upscaler-x2-1.0.safetensors",
     "gemma-3-12b-it-qat-q4_0-unquantized",
 ]
