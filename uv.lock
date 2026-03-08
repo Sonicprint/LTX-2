@@ -1937,6 +1937,7 @@ version = "1.0.0"
 source = { editable = "packages/ltx-pipelines" }
 dependencies = [
     { name = "av" },
+    { name = "einops" },
     { name = "ltx-core" },
     { name = "pillow", version = "10.3.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-8-ltx-core-fp8-trtllm'" },
     { name = "pillow", version = "12.1.0", source = { registry = "https://pypi.org/simple" }, marker = "extra == 'extra-8-ltx-core-xformers' or extra != 'extra-8-ltx-core-fp8-trtllm'" },
@@ -1946,6 +1947,7 @@ dependencies = [
 [package.metadata]
 requires-dist = [
     { name = "av" },
+    { name = "einops" },
     { name = "ltx-core", editable = "packages/ltx-core" },
     { name = "pillow" },
     { name = "tqdm" },

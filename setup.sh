@@ -29,8 +29,8 @@ header()  { echo -e "\n${BOLD}━━━  $*  ━━━${RESET}"; }
 
 # ── Configuration ─────────────────────────────────────────────────────────────
 INSTALL_DIR="${INSTALL_DIR:-/workspace/LTX-2}"
-CKPT_DIR="${INSTALL_DIR}/checkpoints"
-LORAS_DIR="${CKPT_DIR}/loras"
+CKPT_DIR="${CKPT_DIR:-${INSTALL_DIR}/checkpoints}"
+LORAS_DIR="${LORAS_DIR:-${CKPT_DIR}/loras}"
 SKIP_LORAS="${SKIP_LORAS:-0}"
 SKIP_OPTIONAL="${SKIP_OPTIONAL:-0}"
 DISTILLED_MODEL="${DISTILLED_MODEL:-distilled}"   # "distilled" | "dev-fp8"
