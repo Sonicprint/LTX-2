@@ -38,7 +38,7 @@ RUN apt-get update -qq && \
     apt-get update -qq && \
     apt-get install -y -qq --no-install-recommends \
         python3.12 python3.12-dev python3.12-venv \
-        git git-lfs curl wget ffmpeg \
+        git git-lfs curl wget ffmpeg openssh-server \
         libgl1-mesa-glx libglib2.0-0 libsm6 libxext6 libxrender-dev \
         build-essential ca-certificates aria2 \
     && rm -rf /var/lib/apt/lists/* \
@@ -47,6 +47,13 @@ RUN apt-get update -qq && \
     && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1 \
     && update-alternatives --install /usr/bin/python  python  /usr/bin/python3.12 1 \
     && update-alternatives --install /usr/bin/pip     pip     /usr/local/bin/pip3.12 1
+
+# ── SSH Configuration for Vast.ai ──────────────────────────────────────────────
+RUN mkdir /var/run/sshd && \
+    echo 'root:root' | chpasswd && \
+    sed -i 's/#PermitRootLogin prohibit-password/PermitRootLogin yes/' /etc/ssh/sshd_config && \
+    sed -i 's/#PasswordAuthentication yes/PasswordAuthentication yes/' /etc/ssh/sshd_config && \
+    sed 's@session\s*required\s*pam_loginuid.so@session optional pam_loginuid.so@g' -i /etc/pam.d/sshd
 
 # ── uv (fast Python package manager) ─────────────────────────────────────────
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh
@@ -82,5 +89,12 @@ ENV LTX_CHECKPOINTS_DIR=/workspace/LTX-2/checkpoints \
 
 WORKDIR /workspace/LTX-2
 
-# ── Default: bash (Vast.ai runs its own on-start script after container boot) ─
-CMD ["/bin/bash"]
+# ── SSH Port Expose ──────────────────────────────────────────────────────────
+EXPOSE 22
+
+# ── Startup Script ───────────────────────────────────────────────────────────
+RUN echo '#!/bin/bash\n/usr/sbin/sshd\nexec /bin/bash "$@"' > /start.sh && \
+    chmod +x /start.sh
+
+# ── Default: start script (Vast.ai runs its own on-start script after boot) ──
+CMD ["/start.sh"]

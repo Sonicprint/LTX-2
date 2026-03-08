@@ -39,3 +39,6 @@ tmp
 *.png
 *.wav
 *.webp
+.antigravity-server/
+.lightning_studio/
+.triton/
