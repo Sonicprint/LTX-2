@@ -3,6 +3,8 @@
 This guide provides step-by-step instructions for setting up GitHub authentication via SSH and managing deployments on new instances (e.g., Vast.ai, Lightning.ai).
 
 ---
+## FIRST TRY WITH gh auth login
+select ssh
 
 ## 1. SSH Key Setup
 
