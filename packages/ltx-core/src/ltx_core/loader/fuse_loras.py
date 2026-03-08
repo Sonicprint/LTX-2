@@ -1,7 +1,7 @@
 import torch
 
 from ltx_core.loader.primitives import LoraStateDictWithStrength, StateDict
-from ltx_core.quantization.fp8_cast import calculate_weight_float8
+from ltx_core.quantization.fp8_utils import calculate_weight_float8
 from ltx_core.quantization.fp8_scaled_mm import quantize_weight_to_fp8_per_tensor
 
 

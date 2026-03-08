@@ -34,7 +34,6 @@ All weights are loaded from local disk — no HuggingFace downloads at runtime.
 | Text-to-Video | `--prompt` only |
 | Image-to-Video | `--prompt` + `--first-frame` |
 | Interpolation | `--prompt` + `--first-frame` + `--end-frame` |
-| + Audio Sync | Any mode above + `--audio` |
 
 ---
 
@@ -75,17 +74,6 @@ python inference_new.py \
   --output out.mp4
 ```
 
-### Image-to-Video + Audio Sync
-
-```bash
-python inference_new.py \
-  --prompt "A musician playing piano, fingers moving expressively" \
-  --first-frame ./assets/musician.png \
-  --audio ./assets/piano.wav \
-  --duration 10 \
-  --output out.mp4
-```
-
 ---
 
 ## All Arguments
@@ -96,7 +84,6 @@ python inference_new.py \
 | `--output` | `output.mp4` | Output file path |
 | `--first-frame` | None | First (or only) conditioning image |
 | `--end-frame` | None | Last frame image — enables Interpolate mode |
-| `--audio` | None | Audio file for audio-synced generation (`.wav`, `.mp3`, `.flac`) |
 | `--resolution` | `16:9` | Aspect ratio preset: `16:9`, `1:1`, `9:16` |
 | `--width` | None | Override width in pixels (ignores `--resolution`) |
 | `--height` | None | Override height in pixels (ignores `--resolution`) |
@@ -159,5 +146,4 @@ python inference.py \
 - **Faster runs:** use `--no-enhance-prompt` to skip Gemma rewriting. Useful when your prompt is already detailed.
 - **Reproducibility:** set `--seed 42` (or any fixed integer) to get the same output across runs.
 - **OOM errors:** stay on FP8 (default), shorten `--duration`, or lower `--resolution`.
-- **Audio format:** any format supported by `torchaudio` works. Audio is resampled to 48 kHz mono internally — no pre-processing needed.
-- **Interpolation strength:** the end frame is conditioned at weight `0.5` by default. This is hardcoded in the pipeline; adjust in `inference.py` if needed.
+- **Interpolation strength:** the end frame is conditioned at weight `0.5` by default. This is hardcoded in the pipeline; adjust in `inference_new.py` if needed.
