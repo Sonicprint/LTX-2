@@ -33,6 +33,9 @@ ENV DEBIAN_FRONTEND=noninteractive \
     PATH="/root/.local/bin:$PATH"
 
 RUN apt-get update -qq && \
+    apt-get install -y -qq --no-install-recommends software-properties-common gpg-agent && \
+    add-apt-repository -y ppa:deadsnakes/ppa && \
+    apt-get update -qq && \
     apt-get install -y -qq --no-install-recommends \
         python3.12 python3.12-dev python3.12-venv \
         git git-lfs curl wget ffmpeg \
