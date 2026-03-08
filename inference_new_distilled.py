@@ -96,7 +96,10 @@ for _pkg in (_LTX_CORE, _LTX_PIPELINES):
 # ─────────────────────────────────────────────────────────────────────────────
 from ltx_core.quantization import QuantizationPolicy                          # noqa: E402
 from ltx_pipelines.distilled import DistilledPipeline                         # noqa: E402
-from ltx_core.loader import LoraPathStrengthAndSDOps, LTXV_LORA_COMFY_RENAMING_MAP  # noqa: E402
+from ltx_core.loader import (
+    LTXV_LORA_COMFY_RENAMING_MAP,
+    LoraPathStrengthAndSDOps,
+)
 from ltx_pipelines.utils.args import ImageConditioningInput                   # noqa: E402
 from ltx_pipelines.utils.media_io import encode_video                         # noqa: E402
 from ltx_pipelines.utils.constants import DISTILLED_SIGMA_VALUES, DEFAULT_NEGATIVE_PROMPT
@@ -106,8 +109,9 @@ from ltx_pipelines.utils.constants import DISTILLED_SIGMA_VALUES, DEFAULT_NEGATI
 # ─────────────────────────────────────────────────────────────────────────────
 GEMMA_ROOT = _CHECKPOINTS_DIR / "gemma-3-12b-it-qat-q4_0-unquantized"
 CKPT_BASE  = _CHECKPOINTS_DIR / "ltx-2.3-22b-distilled.safetensors"
-UPSCALER   = _CHECKPOINTS_DIR / "ltx-2.3-spatial-upscaler-x2-1.0.safetensors"
-DIST_LORA  = _CHECKPOINTS_DIR / "ltx-2.3-22b-distilled-lora-384.safetensors"
+UPSCALER      = _CHECKPOINTS_DIR / "ltx-2.3-spatial-upscaler-x2-1.0.safetensors"
+DIST_LORA     = _CHECKPOINTS_DIR / "ltx-2.3-22b-distilled-lora-384.safetensors"
+DETAILER_LORA = _CHECKPOINTS_DIR / "loras" / "ltx-2-19b-ic-lora-detailer.safetensors"
 
 def _check_path(p: Path, label: str) -> None:
     """Warn at import time if a required path is missing."""
@@ -119,8 +123,9 @@ def _check_path(p: Path, label: str) -> None:
         )
 
 _check_path(GEMMA_ROOT, "Gemma directory")
-_check_path(UPSCALER,   "Spatial Upscaler")
-_check_path(DIST_LORA,  "Distilled LoRA")
+_check_path(UPSCALER,      "Spatial Upscaler")
+_check_path(DIST_LORA,     "Distilled LoRA")
+_check_path(DETAILER_LORA, "Detailer LoRA")
 # Check transformer checkpoint after parsing args
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -154,12 +159,12 @@ def calc_frames(duration: float, fps: float = DEFAULT_FPS) -> int:
 # ─────────────────────────────────────────────────────────────────────────────
 
 class LTXInferencePipeline:
-    def __init__(self, device: str = "cuda", quantize: bool = True, loras: list[LoraPathStrengthAndSDOps] = [], temporal_upsampler_path: Optional[str] = None):
+    def __init__(self, device: str = "cuda", quantize: bool = True, loras: list[LoraPathStrengthAndSDOps] = []):
         self.device = torch.device(device)
         quantization = (
             QuantizationPolicy.fp8_cast()
             if quantize
-            else QuantizationPolicy.no_quantization()
+            else None
         )
 
         t0 = time.time()
@@ -168,20 +173,32 @@ class LTXInferencePipeline:
         log.info(f"  Transformer : {CKPT_BASE.name}")
         log.info(f"  Upscaler    : {UPSCALER.name}")
         log.info(f"  Dist Lora   : {DIST_LORA.name}")
+        log.info(f"  Detail Lora : {DETAILER_LORA.name}")
         log.info(f"  Gemma       : {GEMMA_ROOT.name}")
         if loras:
             log.info(f"  Extra Loras : {len(loras)} loaded")
-        if temporal_upsampler_path:
-            log.info(f"  Temp Uscl   : {Path(temporal_upsampler_path).name}")
         log.info("=" * 60)
 
-        distilled_lora_obj = [LoraPathStrengthAndSDOps(str(DIST_LORA), 1.0, LTXV_LORA_COMFY_RENAMING_MAP)]
-        all_loras = distilled_lora_obj + loras
+        default_loras = [
+            LoraPathStrengthAndSDOps(str(DIST_LORA), 1.0, LTXV_LORA_COMFY_RENAMING_MAP),
+        ]
+        
+        # Add Detailer LoRA only if not already provided via CLI to avoid duplication
+        cli_lora_paths = [Path(l.path).resolve() for l in loras]
+        detailer_path_abs = DETAILER_LORA.resolve()
+        
+        if detailer_path_abs not in cli_lora_paths:
+            log.info(f"  Detail Lora : {DETAILER_LORA.name} (default, strength 0.5)")
+            default_loras.append(LoraPathStrengthAndSDOps(str(DETAILER_LORA), 0.5, LTXV_LORA_COMFY_RENAMING_MAP))
+        else:
+            log.info(f"  Detail Lora : {DETAILER_LORA.name} (from CLI)")
+
+        all_loras = default_loras + loras
 
         self._pipeline = DistilledPipeline(
             distilled_checkpoint_path = str(CKPT_BASE),
             spatial_upsampler_path    = str(UPSCALER),
-            temporal_upsampler_path   = temporal_upsampler_path,
+            temporal_upsampler_path   = None,
             gemma_root                = str(GEMMA_ROOT),
             loras                     = all_loras,
             device                    = self.device,
@@ -236,7 +253,9 @@ class LTXInferencePipeline:
             log.info(f"End frame   : {end_frame}  (index {end_idx})")
 
         t_start = time.time()
-        log.info("Running DistilledPipeline (8-step Stage 1 + 4-step Stage 2)...")
+        log.info("Running DistilledPipeline (8-step Stage 1 + 4-step Stage 2) with tiled decoding...")
+        
+        from ltx_core.model.video_vae import TilingConfig
 
         video_iterator, audio = self._pipeline(
             prompt              = prompt,
@@ -246,18 +265,14 @@ class LTXInferencePipeline:
             num_frames          = num_frames,
             frame_rate          = fps,
             images              = images,
+            tiling_config       = TilingConfig.default(),
             enhance_prompt      = enhance_prompt,
         )
 
         log.info(f"Encoding video → {output_path}")
-        from ltx_core.model.video_vae import get_video_chunks_number, TilingConfig
+        from ltx_core.model.video_vae import get_video_chunks_number
         
-        # If temporal upscaler was used, the frame count has doubled (minus 1 for the first frame logic)
-        final_num_frames = num_frames
-        if hasattr(self._pipeline.model_ledger, 'temporal_upsampler_path') and self._pipeline.model_ledger.temporal_upsampler_path:
-             final_num_frames = 2 * (num_frames - 1) + 1
-        
-        chunks = get_video_chunks_number(final_num_frames, TilingConfig.default())
+        chunks = get_video_chunks_number(num_frames, TilingConfig.default())
 
         encode_video(
             video               = video_iterator,
@@ -274,7 +289,7 @@ class LTXInferencePipeline:
             "output_path":  output_path,
             "seed":         current_seed,
             "elapsed":      elapsed,
-            "num_frames":   final_num_frames,
+            "num_frames":   num_frames,
             "width":        width,
             "height":       height,
             "duration":     duration,
@@ -305,8 +320,8 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--no-quantize",       dest="quantize",       action="store_false", default=True)
     p.add_argument("--device",       default="cuda")
     p.add_argument("--checkpoints-dir", default=None, metavar="DIR")
-    p.add_argument("--temporal-upscaler", default=None, metavar="PATH", help="Path to temporal upscaler (.safetensors)")
     p.add_argument("--lora", nargs=2, action='append', metavar=("PATH", "STRENGTH"), help="Path to LoRA and its strength (0.0-1.0)")
+    
     # For backwards compatibility with old commands in readme, ignore audio arg
     p.add_argument("--audio",        default=None, metavar="PATH", help=argparse.SUPPRESS)
     return p
@@ -370,19 +385,7 @@ def main():
                 LoraPathStrengthAndSDOps(str(lp), float(strength), LTXV_LORA_COMFY_RENAMING_MAP)
             )
 
-    # Resolve Temporal Upscaler
-    temp_upscale_path = None
-    if args.temporal_upscaler:
-        t_path = Path(args.temporal_upscaler)
-        if not t_path.is_absolute() and not t_path.exists():
-            alt_t = _ckpt / args.temporal_upscaler
-            if alt_t.exists(): t_path = alt_t
-        if not t_path.exists():
-            log.error(f"Temporal upscaler not found: {t_path}")
-            sys.exit(1)
-        temp_upscale_path = str(t_path)
-
-    pipe = LTXInferencePipeline(device=args.device, quantize=args.quantize, loras=lora_objs, temporal_upsampler_path=temp_upscale_path)
+    pipe = LTXInferencePipeline(device=args.device, quantize=args.quantize, loras=lora_objs)
 
     try:
         result = pipe.generate(

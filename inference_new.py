@@ -233,7 +233,8 @@ class LTXInferencePipeline:
             log.info(f"End frame   : {end_frame}  (index {end_idx})")
 
         t_start = time.time()
-        log.info("Running TI2VidTwoStagesPipeline (Stage 1 CFG + Stage 2 Distilled Upscale)...")
+        log.info("Running TI2VidTwoStagesPipeline (Stage 1 CFG + Stage 2 Distilled Upscale) with tiled decoding...")
+        from ltx_core.model.video_vae import TilingConfig
 
         video_iterator, audio = self._pipeline(
             prompt              = prompt,
@@ -247,11 +248,12 @@ class LTXInferencePipeline:
             video_guider_params = LTX_2_3_PARAMS.video_guider_params,
             audio_guider_params = LTX_2_3_PARAMS.audio_guider_params,
             images              = images,
+            tiling_config       = TilingConfig.default(),
             enhance_prompt      = enhance_prompt,
         )
 
         log.info(f"Encoding video → {output_path}")
-        from ltx_core.model.video_vae import get_video_chunks_number, TilingConfig
+        from ltx_core.model.video_vae import get_video_chunks_number
         chunks = get_video_chunks_number(num_frames, TilingConfig.default())
 
         encode_video(
@@ -298,6 +300,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--enhance-prompt",    dest="enhance_prompt", action="store_true",  default=True)
     p.add_argument("--no-enhance-prompt", dest="enhance_prompt", action="store_false")
     p.add_argument("--no-quantize",       dest="quantize",       action="store_false", default=True)
+    p.add_argument("--steps", "--num-inference-steps", dest="num_inference_steps", type=int, default=None, help="Inference steps")
     p.add_argument("--device",       default="cuda")
     p.add_argument("--checkpoints-dir", default=None, metavar="DIR")
     p.add_argument("--lora", nargs=2, action='append', metavar=("PATH", "STRENGTH"), help="Path to LoRA and its strength (0.0-1.0)")

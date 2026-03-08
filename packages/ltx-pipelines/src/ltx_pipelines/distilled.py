@@ -1,4 +1,5 @@
 import logging
+from dataclasses import replace
 from collections.abc import Iterator
 
 import torch
@@ -31,6 +32,7 @@ from ltx_pipelines.utils.helpers import (
     denoise_audio_video,
     encode_prompts,
     get_device,
+    multi_modal_guider_denoising_func,
     simple_denoising_func,
 )
 from ltx_pipelines.utils.media_io import encode_video
@@ -99,29 +101,13 @@ class DistilledPipeline:
             self.model_ledger,
             enhance_first_prompt=enhance_prompt,
             enhance_prompt_image=images[0][0] if len(images) > 0 else None,
+            enhance_prompt_seed=seed,
         )
         video_context, audio_context = ctx_p.video_encoding, ctx_p.audio_encoding
 
         # Stage 1: Initial low resolution video generation.
+        # Load VAE to encode image prompts, then free it to save VRAM.
         video_encoder = self.model_ledger.video_encoder()
-        transformer = self.model_ledger.transformer()
-        stage_1_sigmas = torch.Tensor(DISTILLED_SIGMA_VALUES).to(self.device)
-
-        def denoising_loop(
-            sigmas: torch.Tensor, video_state: LatentState, audio_state: LatentState, stepper: DiffusionStepProtocol
-        ) -> tuple[LatentState, LatentState]:
-            return euler_denoising_loop(
-                sigmas=sigmas,
-                video_state=video_state,
-                audio_state=audio_state,
-                stepper=stepper,
-                denoise_fn=simple_denoising_func(
-                    video_context=video_context,
-                    audio_context=audio_context,
-                    transformer=transformer,  # noqa: F821
-                ),
-            )
-
         stage_1_output_shape = VideoPixelShape(
             batch=1,
             frames=num_frames,
@@ -137,6 +123,28 @@ class DistilledPipeline:
             dtype=dtype,
             device=self.device,
         )
+        torch.cuda.synchronize()
+        del video_encoder
+        cleanup_memory()
+
+        # Load Transformer for Stage 1 denoising.
+        transformer = self.model_ledger.transformer()
+        stage_1_sigmas = torch.Tensor(DISTILLED_SIGMA_VALUES).to(self.device)
+
+        def denoising_loop(
+            sigmas: torch.Tensor, video_state: LatentState, audio_state: LatentState, stepper: DiffusionStepProtocol
+        ) -> tuple[LatentState, LatentState]:
+            return euler_denoising_loop(
+                sigmas=sigmas,
+                video_state=video_state,
+                audio_state=audio_state,
+                stepper=stepper,
+                denoise_fn=simple_denoising_func(
+                    video_context=video_context,
+                    audio_context=audio_context,
+                    transformer=transformer,
+                ),
+            )
 
         video_state, audio_state = denoise_audio_video(
             output_shape=stage_1_output_shape,
@@ -150,15 +158,19 @@ class DistilledPipeline:
             device=self.device,
         )
 
-        # Stage 2: Upsample and refine the video at higher resolution with distilled LORA.
-        upscaled_video_latent = upsample_video(
-            latent=video_state.latent[:1], video_encoder=video_encoder, upsampler=self.model_ledger.spatial_upsampler()
-        )
-
         torch.cuda.synchronize()
+        del transformer
         cleanup_memory()
 
-        stage_2_sigmas = torch.Tensor(STAGE_2_DISTILLED_SIGMA_VALUES).to(self.device)
+        # Stage 2: Upsample and refine the video at higher resolution.
+        # Load VAE and Upsampler to prepare Stage 2, then free them.
+        video_encoder = self.model_ledger.video_encoder()
+        upscaled_video_latent = upsample_video(
+            latent=video_state.latent[:1],
+            video_encoder=video_encoder,
+            upsampler=self.model_ledger.spatial_upsampler(),
+        )
+
         stage_2_output_shape = VideoPixelShape(batch=1, frames=num_frames, width=width, height=height, fps=frame_rate)
         stage_2_conditionings = combined_image_conditionings(
             images=images,
@@ -168,6 +180,14 @@ class DistilledPipeline:
             dtype=dtype,
             device=self.device,
         )
+        torch.cuda.synchronize()
+        del video_encoder
+        cleanup_memory()
+
+        # Load Transformer for Stage 2 refinement.
+        transformer = self.model_ledger.transformer()
+        stage_2_sigmas = torch.Tensor(STAGE_2_DISTILLED_SIGMA_VALUES).to(self.device)
+
         video_state, audio_state = denoise_audio_video(
             output_shape=stage_2_output_shape,
             conditionings=stage_2_conditionings,
@@ -187,21 +207,7 @@ class DistilledPipeline:
         del transformer
         cleanup_memory()
 
-        if self.model_ledger.temporal_upsampler_path is not None:
-            video_encoder = self.model_ledger.video_encoder()
-            video_state.latent = upsample_video(
-                latent=video_state.latent,
-                video_encoder=video_encoder,
-                upsampler=self.model_ledger.temporal_upsampler(),
-            )
-            del video_encoder
-            torch.cuda.synchronize()
-            cleanup_memory()
-        else:
-            del video_encoder
-            torch.cuda.synchronize()
-            cleanup_memory()
-
+        # Final decoding: Load VAE decoder only.
         decoded_video = vae_decode_video(
             video_state.latent, self.model_ledger.video_decoder(), tiling_config, generator
         )
