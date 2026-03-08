@@ -46,7 +46,8 @@ RUN apt-get update -qq && \
     && git lfs install --skip-smudge \
     && update-alternatives --install /usr/bin/python3 python3 /usr/bin/python3.12 1 \
     && update-alternatives --install /usr/bin/python  python  /usr/bin/python3.12 1 \
-    && update-alternatives --install /usr/bin/pip     pip     /usr/local/bin/pip3.12 1
+    && update-alternatives --install /usr/bin/pip     pip     /usr/local/bin/pip3.12 1 \
+    && ln -s libcuda.so.1 /usr/lib/x86_64-linux-gnu/libcuda.so
 
 # ── SSH Configuration for Vast.ai ──────────────────────────────────────────────
 RUN mkdir /var/run/sshd && \

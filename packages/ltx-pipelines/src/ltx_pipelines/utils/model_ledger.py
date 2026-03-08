@@ -100,6 +100,7 @@ class ModelLedger:
         checkpoint_path: str | None = None,
         gemma_root_path: str | None = None,
         spatial_upsampler_path: str | None = None,
+        temporal_upsampler_path: str | None = None,
         loras: tuple[LoraPathStrengthAndSDOps, ...] = (),
         registry: Registry | None = None,
         quantization: QuantizationPolicy | None = None,
@@ -109,6 +110,7 @@ class ModelLedger:
         self.checkpoint_path = checkpoint_path
         self.gemma_root_path = gemma_root_path
         self.spatial_upsampler_path = spatial_upsampler_path
+        self.temporal_upsampler_path = temporal_upsampler_path
         self.loras = loras
         self.registry = registry or DummyRegistry()
         self.quantization = quantization
@@ -187,6 +189,13 @@ class ModelLedger:
                 registry=self.registry,
             )
 
+        if self.temporal_upsampler_path is not None:
+            self.temporal_upsampler_builder = Builder(
+                model_path=self.temporal_upsampler_path,
+                model_class_configurator=LatentUpsamplerConfigurator,
+                registry=self.registry,
+            )
+
     def _target_device(self) -> torch.device:
         if isinstance(self.registry, DummyRegistry) or self.registry is None:
             return self.device
@@ -205,6 +214,7 @@ class ModelLedger:
             checkpoint_path=self.checkpoint_path,
             gemma_root_path=self.gemma_root_path,
             spatial_upsampler_path=self.spatial_upsampler_path,
+            temporal_upsampler_path=self.temporal_upsampler_path,
             loras=loras,
             registry=self.registry,
             quantization=self.quantization,
@@ -299,6 +309,12 @@ class ModelLedger:
 
     def spatial_upsampler(self) -> LatentUpsampler:
         if not hasattr(self, "upsampler_builder"):
-            raise ValueError("Upsampler not initialized. Please provide upsampler path to the ModelLedger constructor.")
+            raise ValueError("Spatial upsampler not initialized. Please provide upsampler path to the ModelLedger constructor.")
 
         return self.upsampler_builder.build(device=self._target_device(), dtype=self.dtype).to(self.device).eval()
+
+    def temporal_upsampler(self) -> LatentUpsampler:
+        if not hasattr(self, "temporal_upsampler_builder"):
+            raise ValueError("Temporal upsampler not initialized. Please provide temporal upsampler path to the ModelLedger constructor.")
+
+        return self.temporal_upsampler_builder.build(device=self._target_device(), dtype=self.dtype).to(self.device).eval()

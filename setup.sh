@@ -33,7 +33,7 @@ CKPT_DIR="${CKPT_DIR:-${INSTALL_DIR}/checkpoints}"
 LORAS_DIR="${LORAS_DIR:-${CKPT_DIR}/loras}"
 SKIP_LORAS="${SKIP_LORAS:-0}"
 SKIP_OPTIONAL="${SKIP_OPTIONAL:-0}"
-DISTILLED_MODEL="${DISTILLED_MODEL:-both}"   # "both" | "distilled" | "dev-fp8"
+DISTILLED_MODEL="${DISTILLED_MODEL:-dev}"   # "dev" | "distilled" | "both"
 MODE="${1:-full}"   # "full" | "minimal"
 
 [[ "$MODE" == "minimal" ]] && SKIP_LORAS=1 && SKIP_OPTIONAL=1
@@ -56,6 +56,13 @@ apt-get install -y -qq \
     aria2 \
     2>/dev/null
 git lfs install --skip-smudge 2>/dev/null || true
+
+# Ensure libcuda.so exists for Triton JIT compilation
+if [[ ! -f /usr/lib/x86_64-linux-gnu/libcuda.so ]] && [[ -f /usr/lib/x86_64-linux-gnu/libcuda.so.1 ]]; then
+    info "Creating libcuda.so symlink for Triton..."
+    ln -s libcuda.so.1 /usr/lib/x86_64-linux-gnu/libcuda.so
+fi
+
 success "System dependencies installed"
 
 # =============================================================================
@@ -144,11 +151,10 @@ mkdir -p "$CKPT_DIR" "$LORAS_DIR"
 # =============================================================================
 header "Step 6 — Download main transformer checkpoint"
 # =============================================================================
-case "$DISTILLED_MODEL" in
-    dev-fp8)
-        info "Downloading dev-fp8 checkpoint (~27 GB)..."
+    dev)
+        info "Downloading dev checkpoint (~43 GB)..."
         HF_DL "Lightricks/LTX-2.3" \
-               "ltx-2.3-22b-dev-fp8.safetensors" \
+               "ltx-2.3-22b-dev.safetensors" \
                "$CKPT_DIR"
         ;;
     distilled)
@@ -158,9 +164,9 @@ case "$DISTILLED_MODEL" in
                "$CKPT_DIR"
         ;;
     *)
-        info "Downloading both dev-fp8 and distilled checkpoints..."
+        info "Downloading both dev and distilled checkpoints..."
         HF_DL "Lightricks/LTX-2.3" \
-               "ltx-2.3-22b-dev-fp8.safetensors" \
+               "ltx-2.3-22b-dev.safetensors" \
                "$CKPT_DIR"
         HF_DL "Lightricks/LTX-2.3" \
                "ltx-2.3-22b-distilled.safetensors" \
@@ -305,9 +311,9 @@ import os, pathlib
 ckpt = pathlib.Path("${CKPT_DIR}")
 model_req = []
 if "${DISTILLED_MODEL}" == "both":
-    model_req = ["ltx-2.3-22b-dev-fp8.safetensors", "ltx-2.3-22b-distilled.safetensors"]
-elif "${DISTILLED_MODEL}" == "dev-fp8":
-    model_req = ["ltx-2.3-22b-dev-fp8.safetensors"]
+    model_req = ["ltx-2.3-22b-dev.safetensors", "ltx-2.3-22b-distilled.safetensors"]
+elif "${DISTILLED_MODEL}" == "dev":
+    model_req = ["ltx-2.3-22b-dev.safetensors"]
 else:
     model_req = ["ltx-2.3-22b-distilled.safetensors"]
 

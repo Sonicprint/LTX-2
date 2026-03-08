@@ -52,6 +52,7 @@ class DistilledPipeline:
         gemma_root: str,
         spatial_upsampler_path: str,
         loras: list[LoraPathStrengthAndSDOps],
+        temporal_upsampler_path: str | None = None,
         device: torch.device = device,
         quantization: QuantizationPolicy | None = None,
     ):
@@ -63,6 +64,7 @@ class DistilledPipeline:
             device=device,
             checkpoint_path=distilled_checkpoint_path,
             spatial_upsampler_path=spatial_upsampler_path,
+            temporal_upsampler_path=temporal_upsampler_path,
             gemma_root_path=gemma_root,
             loras=loras,
             quantization=quantization,
@@ -183,8 +185,22 @@ class DistilledPipeline:
 
         torch.cuda.synchronize()
         del transformer
-        del video_encoder
         cleanup_memory()
+
+        if self.model_ledger.temporal_upsampler_path is not None:
+            video_encoder = self.model_ledger.video_encoder()
+            video_state.latent = upsample_video(
+                latent=video_state.latent,
+                video_encoder=video_encoder,
+                upsampler=self.model_ledger.temporal_upsampler(),
+            )
+            del video_encoder
+            torch.cuda.synchronize()
+            cleanup_memory()
+        else:
+            del video_encoder
+            torch.cuda.synchronize()
+            cleanup_memory()
 
         decoded_video = vae_decode_video(
             video_state.latent, self.model_ledger.video_decoder(), tiling_config, generator
