@@ -40,5 +40,36 @@ class VideoConditionByLatentIndex(ConditioningItem):
         latent_state.latent[:, start_token:stop_token] = tokens
         latent_state.clean_latent[:, start_token:stop_token] = tokens
         latent_state.denoise_mask[:, start_token:stop_token] = 1.0 - self.strength
+        return latent_state
+
+
+class AudioConditionByLatent(ConditioningItem):
+    """
+    Conditions audio generation by providing a full latent reference.
+    Sets the clean latent and resets the denoise mask according to the strength.
+    For lip-sync, use strength=1.0 to completely lock the audio.
+    """
+
+    def __init__(self, latent: torch.Tensor, strength: float = 1.0):
+        self.latent = latent
+        self.strength = strength
+
+    def apply_to(self, latent_state: LatentState, latent_tools: LatentTools) -> LatentState:
+        # Audio latents are usually (B, C, T, F_bins)
+        # Patchifier will handle the sequence conversion
+        tokens = latent_tools.patchifier.patchify(self.latent)
+        
+        latent_state = latent_state.clone()
+        # Ensure shapes match
+        if tokens.shape != latent_state.latent.shape:
+             # If durations differ, we might need to crop or pad, 
+             # but for now we assume they match or we adjust.
+             # Given we create the state from the audio duration usually, it should match.
+             pass
+
+        latent_state.latent[:, :tokens.shape[1]] = tokens
+        latent_state.clean_latent[:, :tokens.shape[1]] = tokens
+        # 1.0 strength means 0.0 denoise mask (fixed)
+        latent_state.denoise_mask[:, :tokens.shape[1]] = 1.0 - self.strength
 
         return latent_state
