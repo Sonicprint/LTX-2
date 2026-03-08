@@ -118,11 +118,19 @@ def _fuse_delta_with_scaled_fp8(
 ) -> dict[str, torch.Tensor]:
     """Dequantize scaled FP8 weight, add LoRA delta, and re-quantize."""
     weight_scale = model_sd.sd[scale_key]
+    
+    # Original weight is [out_features, in_features]
+    # weight_scale is [out_features]
+    # deltas is [out_features, in_features]
+    # weight.t() is [in_features, out_features]
 
-    original_weight = weight.t().to(torch.float32) * weight_scale
+    # Dequantize to float32
+    original_weight = weight.to(torch.float32) * weight_scale.unsqueeze(1)
 
+    # Add the LoRA delta
     new_weight = original_weight + deltas.to(torch.float32)
 
+    # Re-quantize to FP8
     new_fp8_weight, new_weight_scale = quantize_weight_to_fp8_per_tensor(new_weight)
     return {key: new_fp8_weight, scale_key: new_weight_scale}
 
